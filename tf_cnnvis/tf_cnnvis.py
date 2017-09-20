@@ -70,7 +70,7 @@ def _save_model(graph):
 
 
 # All visualization of convolution happens here
-def _get_visualization(graph_or_path, value_feed_dict, input_tensor, layers, path_logdir, path_outdir, method = None):
+def _get_visualization(graph_or_path, value_feed_dict, input_tensor, layers, path_logdir, path_outdir, method = None, name_suffix=''):
 	"""
 	cnnvis main api function
 
@@ -104,6 +104,10 @@ def _get_visualization(graph_or_path, value_feed_dict, input_tensor, layers, pat
 		<path-to-dir> to save results into disk as images
 	:type path_outdir: String (Default = "./Output")
 
+	:param name_suffix:
+		Name suffix for final tensorboard image summary
+	:type name_suffix: String (Default = "")
+
 	:return:
 		True if successful. False otherwise.
 	:rtype: boolean
@@ -135,10 +139,10 @@ def _get_visualization(graph_or_path, value_feed_dict, input_tensor, layers, pat
 
 		for layer in layers:
 			if layer != None and layer.lower() not in dict_layer.keys():
-				is_success = _visualization_by_layer_name(g, value_feed_dict, input_tensor, layer, method, path_logdir, path_outdir)
+				is_success = _visualization_by_layer_name(g, value_feed_dict, input_tensor, layer, method, path_logdir, path_outdir, name_suffix=name_suffix)
 			elif layer != None and layer.lower() in dict_layer.keys():
 				layer_type = dict_layer[layer.lower()]
-				is_success = _visualization_by_layer_type(g, value_feed_dict, input_tensor, layer_type, method, path_logdir, path_outdir)
+				is_success = _visualization_by_layer_type(g, value_feed_dict, input_tensor, layer_type, method, path_logdir, path_outdir, name_suffix=name_suffix)
 			else:
 				print("Skipping %s . %s is not valid layer name or layer type" % (layer, layer))
 
@@ -151,7 +155,7 @@ def _graph_import_function(PATH):
 		new_saver.restore(sess, tf.train.latest_checkpoint(os.path.dirname(PATH)))
 		return sess
 
-def _visualization_by_layer_type(graph, value_feed_dict, input_tensor, layer_type, method, path_logdir, path_outdir):
+def _visualization_by_layer_type(graph, value_feed_dict, input_tensor, layer_type, method, path_logdir, path_outdir, name_suffix=''):
 	"""
 	Generate filter visualization from the layers which are of type layer_type
 
@@ -183,6 +187,10 @@ def _visualization_by_layer_type(graph, value_feed_dict, input_tensor, layer_typ
 		<path-to-dir> to save results into disk as images
 	:type path_outdir: String (Default = "./Output")
 
+	:param name_suffix:
+		Name suffix for final tensorboard image summary
+	:type name_suffix: String (Default = "")
+
 	:return:
 		True if successful. False otherwise.
 	:rtype: boolean
@@ -197,10 +205,10 @@ def _visualization_by_layer_type(graph, value_feed_dict, input_tensor, layer_typ
 			layers.append(i.name)
 
 	for layer in layers:
-		is_success = _visualization_by_layer_name(graph, value_feed_dict, input_tensor, layer, method, path_logdir, path_outdir)
+		is_success = _visualization_by_layer_name(graph, value_feed_dict, input_tensor, layer, method, path_logdir, path_outdir, name_suffix=name_suffix)
 	return is_success
 
-def _visualization_by_layer_name(graph, value_feed_dict, input_tensor, layer_name, method, path_logdir, path_outdir):
+def _visualization_by_layer_name(graph, value_feed_dict, input_tensor, layer_name, method, path_logdir, path_outdir, name_suffix=''):
 	"""
 	Generate and store filter visualization from the layer which has the name layer_name
 
@@ -228,6 +236,10 @@ def _visualization_by_layer_name(graph, value_feed_dict, input_tensor, layer_nam
 	:param path_outdir:
 		<path-to-dir> to save results into disk as images
 	:type path_outdir: String (Default = "./Output")
+
+	:param name_suffix:
+		Name suffix for final tensorboard image summary
+	:type name_suffix: String (Default = "")
 
 	:return:
 		True if successful. False otherwise.
@@ -261,7 +273,7 @@ def _visualization_by_layer_name(graph, value_feed_dict, input_tensor, layer_nam
 				results = _deconvolution(graph, sess, op_tensor, X, feed_dict)
 			elif method == "deepdream":
 				# deepdream
-				is_success = _deepdream(graph, sess, op_tensor, X, feed_dict, layer_name, path_outdir, path_logdir)
+				is_success = _deepdream(graph, sess, op_tensor, X, feed_dict, layer_name, path_outdir, path_logdir, name_suffix=name_suffix)
 				is_deep_dream = False
 
 			sess = None
@@ -271,7 +283,7 @@ def _visualization_by_layer_name(graph, value_feed_dict, input_tensor, layer_nam
 	# 	return is_success
 
 	if is_deep_dream:
-		is_success = write_results(results, layer_name, path_outdir, path_logdir, method = method)
+		is_success = write_results(results, layer_name, path_outdir, path_logdir, method = method, name_suffix=name_suffix)
 
 	start += time.time()
 	print("Reconstruction Completed for %s layer. Time taken = %f s" % (layer_name, start))
@@ -307,7 +319,7 @@ def _deconvolution(graph, sess, op_tensor, X, feed_dict):
 				if c > 0:
 					out.extend(sess.run(reconstruct[:c], feed_dict = feed_dict))
 	return out
-def _deepdream(graph, sess, op_tensor, X, feed_dict, layer, path_outdir, path_logdir):
+def _deepdream(graph, sess, op_tensor, X, feed_dict, layer, path_outdir, path_logdir, name_suffix=''):
 	tensor_shape = op_tensor.get_shape().as_list()
 
 	with graph.as_default() as g:
@@ -364,21 +376,21 @@ def _deepdream(graph, sess, op_tensor, X, feed_dict, layer, path_outdir, path_lo
 
 						lap_out = sess.run(laplacian_pyramid, feed_dict={lap_in:np.roll(np.roll(grad, -sx, 2), -sy, 1)})
 						img = img + lap_out
-				is_success = write_results(img, (layer, units, k), path_outdir, path_logdir, method = "deepdream")
+				is_success = write_results(img, (layer, units, k), path_outdir, path_logdir, method = "deepdream", name_suffix=name_suffix)
 				print("%s -> featuremap completed." % (", ".join(str(num) for num in units[k:k+c])))
 	return is_success
 
 
 # main api methods
-def activation_visualization(graph_or_path, value_feed_dict, input_tensor = None, layers = 'r', path_logdir = './Log', path_outdir = "./Output"):
+def activation_visualization(graph_or_path, value_feed_dict, input_tensor = None, layers = 'r', path_logdir = './Log', path_outdir = "./Output", name_suffix=''):
 	is_success = _get_visualization(graph_or_path, value_feed_dict, input_tensor = input_tensor, layers = layers, method = "act",
-		path_logdir = path_logdir, path_outdir = path_outdir)
+		path_logdir = path_logdir, path_outdir = path_outdir, name_suffix=name_suffix)
 	return is_success
-def deconv_visualization(graph_or_path, value_feed_dict, input_tensor = None, layers = 'r', path_logdir = './Log', path_outdir = "./Output"):
+def deconv_visualization(graph_or_path, value_feed_dict, input_tensor = None, layers = 'r', path_logdir = './Log', path_outdir = "./Output", name_suffix=''):
 	is_success = _get_visualization(graph_or_path, value_feed_dict, input_tensor = input_tensor, layers = layers, method = "deconv",
-		path_logdir = path_logdir, path_outdir = path_outdir)
+		path_logdir = path_logdir, path_outdir = path_outdir, name_suffix=name_suffix)
 	return is_success
-def deepdream_visualization(graph_or_path, value_feed_dict, layer, classes, input_tensor = None, path_logdir = './Log', path_outdir = "./Output"):
+def deepdream_visualization(graph_or_path, value_feed_dict, layer, classes, input_tensor = None, path_logdir = './Log', path_outdir = "./Output", name_suffix=''):
 	is_success = True
 	if isinstance(layer, list):
 		print("Please only give classification layer name for reconstruction.")
@@ -390,5 +402,5 @@ def deepdream_visualization(graph_or_path, value_feed_dict, layer, classes, inpu
 		global units
 		units = classes
 		is_success = _get_visualization(graph_or_path, value_feed_dict, input_tensor = input_tensor, layers = layer, method = "deepdream",
-			path_logdir = path_logdir, path_outdir = path_outdir)
+			path_logdir = path_logdir, path_outdir = path_outdir, name_suffix=name_suffix)
 	return is_success
